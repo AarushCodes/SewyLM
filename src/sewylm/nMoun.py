@@ -34,11 +34,15 @@ def zeropower_via_newtonschulz5(G, steps=10, eps=1e-7):
 
 class Muon(torch.optim.Optimizer):
     def __init__(self, muon_params, lr=0.02, momentum=0.95, nesterov=True, ns_steps=5,
-                 adamw_params=None, adamw_lr=3e-4, adamw_betas=(0.95, 0.95), adamw_eps=1e-8, adamw_wd=0, model=None):
+                 adamw_params=None, adamw_lr=3e-4, adamw_betas=(0.95, 0.95), adamw_eps=1e-8, adamw_wd=0, model=None,
+                 momentum_warmup_steps=100, initial_momentum=0.85):  # Added new parameters
         
         defaults = dict(lr=lr, momentum=momentum, nesterov=nesterov, ns_steps=ns_steps,
                        adamw_lr_ratio=adamw_lr/lr, adamw_betas=adamw_betas,
-                       adamw_eps=adamw_eps, adamw_wd=adamw_wd)
+                       adamw_eps=adamw_eps, adamw_wd=adamw_wd,
+                       momentum_warmup_steps=momentum_warmup_steps,
+                       initial_momentum=initial_momentum,
+                       final_momentum=momentum)  # Added warmup parameters
 
         params = list(muon_params)
         adamw_params = list(adamw_params) if adamw_params is not None else []
@@ -73,11 +77,24 @@ class Muon(torch.optim.Optimizer):
         self.total_muon_params = sum(p.numel() for p in self.muon_params)
         self.updates_flat = torch.zeros(self.total_muon_params, device='cuda', dtype=torch.bfloat16)
 
+        # Add warmup tracking
+        self.current_step = 0
+        self.momentum_warmup_steps = momentum_warmup_steps
+        self.initial_momentum = initial_momentum
+        self.final_momentum = momentum
+
     def _init_adamw_state(self, p):
         state = self.state[p]
         state['step'] = 0
         state['moment1'] = torch.zeros_like(p)
         state['moment2'] = torch.zeros_like(p)
+
+    def _get_current_momentum(self):
+        if self.current_step >= self.momentum_warmup_steps:
+            return self.final_momentum
+        # Linear warmup
+        progress = self.current_step / self.momentum_warmup_steps
+        return self.initial_momentum + (self.final_momentum - self.initial_momentum) * progress
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -86,7 +103,14 @@ class Muon(torch.optim.Optimizer):
             with torch.enable_grad():
                 loss = closure()
 
+        # Update current step and momentum
+        self.current_step += 1
+        current_momentum = self._get_current_momentum()
+
         for group in self.param_groups:
+            # Update group momentum
+            group['momentum'] = current_momentum
+            
             # Muon update
             if self.muon_params:
                 self._muon_step(group)

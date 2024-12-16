@@ -30,7 +30,7 @@ print(model)
 
 ## I have also made a modified version of [Moun Optimizer](https://github.com/KellerJordan/Muon/tree/master) in accordance with nGPT paper and few optimizations.
 ```python
-from SewyLM import nMoun
+from sewylm import nMoun
 ## use as pytorch optimizer and also pass model to it like model=model
 ```
 ## Contributing

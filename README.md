@@ -8,7 +8,7 @@ SewyLM is a transformer model made by incorporating the following:
 - NeuTRENO
 - Muon optimizer
 ## FYI im a 15 yr old 
-
+## It is compatible with the huggingface ecosystem.
 ## Installation
 
 You can install SewyLM using pip:

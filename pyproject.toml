@@ -1,0 +1,28 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "sewylm"
+version = "0.1.0"
+description = "A library for SEWY language modeling."
+authors = ["Aarush Khilosia <aarushlikesllms@gmail.com>"]
+license = "GNU GPL v3"
+readme = "README.md"
+homepage = "https://github.com/yourusername/sewylm"
+repository = "https://github.com/yourusername/sewylm"
+keywords = ["language model", "sewy", "nlp"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+torch = "^1.9.0"
+transformers = "^4.0.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.0"
+black = "^21.0"
+flake8 = "^3.9"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

@@ -9,8 +9,8 @@ description = "A library for SEWY language modeling."
 authors = ["Aarush Khilosia <aarushlikesllms@gmail.com>"]
 license = "GNU GPL v3"
 readme = "README.md"
-homepage = "https://github.com/yourusername/sewylm"
-repository = "https://github.com/yourusername/sewylm"
+homepage = "https://github.com/AarushCodes/SewyLM/"
+repository = "https://github.com/AarushCodes/SewyLM/"
 keywords = ["language model", "sewy", "nlp"]
 
 [tool.poetry.dependencies]
@@ -22,7 +22,3 @@ transformers = "^4.0.0"
 pytest = "^6.0"
 black = "^21.0"
 flake8 = "^3.9"
-
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"

@@ -1,13 +1,20 @@
 # SewyLM
 
-SewyLM is a Python library designed for [brief description of the library's purpose and functionality].
+SewyLM is a transformer model made by incorporating the following:
+- Gemma2
+- nGPT
+- Differential Transformer
+- COCONUT
+- NeuTRENO
+
+## FYI im a 15 yr old 
 
 ## Installation
 
 You can install SewyLM using pip:
 
 ```bash
-pip install sewylm
+pip install git+https://github.com/AarushCodes/SewyLM/
 ```
 
 ## Usage
@@ -15,9 +22,10 @@ pip install sewylm
 Here is a simple example of how to use SewyLM:
 
 ```python
-from sewylm import [relevant classes or functions]
-
-# Example usage
+from sewylm.SewyModel import SEWYForCausalLM , SEWYConfig
+config = SEWYConfig(Add ur config here)
+model = SEWYForCausalLM(config)
+print(model)
 ```
 
 ## Contributing

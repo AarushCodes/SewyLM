@@ -34,8 +34,8 @@ def zeropower_via_newtonschulz5(G, steps=10, eps=1e-7):
 
 class Muon(torch.optim.Optimizer):
     def __init__(self, muon_params, lr=0.02, momentum=0.95, nesterov=True, ns_steps=5,
-                 adamw_params=None, adamw_lr=3e-4, adamw_betas=(0.95, 0.95), adamw_eps=1e-8, adamw_wd=0, model=None,
-                 momentum_warmup_steps=100, initial_momentum=0.85):  # Added new parameters
+                 adamw_params=None, adamw_lr=3e-4, adamw_betas=(0.8, 0.95), adamw_eps=1e-8, adamw_wd=0, model=None,
+                 momentum_warmup_steps=300, initial_momentum=0.85):  # Added new parameters
         
         defaults = dict(lr=lr, momentum=momentum, nesterov=nesterov, ns_steps=ns_steps,
                        adamw_lr_ratio=adamw_lr/lr, adamw_betas=adamw_betas,

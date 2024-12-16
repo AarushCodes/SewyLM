@@ -1,17 +1,18 @@
 # coding=utf-8
-# Copyright 2024 Aarush Khilosia. All rights reserved.
+# Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License v3
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from typing import Optional, Tuple, Union
 import math
 import torch
@@ -30,10 +31,6 @@ from transformers.utils import (
     is_flash_attn_greater_or_equal,
     logging,
 )
-try:
-    from transformers.utils import is_torch_greater_or_equal
-except:
-    pass
 from transformers.models.gemma.modeling_gemma import (
     GemmaForCausalLM,
     GemmaForSequenceClassification,
@@ -50,8 +47,7 @@ from transformers.models.gemma.modeling_gemma import (
 if is_flash_attn_2_available():
     from transformers.modeling_flash_attention_utils import _flash_attention_forward
 try:
-    if is_torch_greater_or_equal("2.5"):
-        from torch.nn.attention.flex_attention import flex_attention
+    from torch.nn.attention.flex_attention import flex_attention
 except:
     pass
 
@@ -124,6 +120,7 @@ class SEWYConfig(PretrainedConfig):
 
         coconut_iter = the number of iterations for the Training Large Language Models to Reason in a
 Continuous Latent Space
+        n_coconut_layers = the number of last n layers to apply the coconut to. (default is 4)
 
     ```python
     >>> from transformers import SEWYModel, SEWYConfig
@@ -166,6 +163,7 @@ Continuous Latent Space
         cache_implementation="hybrid",
         coconut_iter=4,
         init_neutreno_lambda=2.0,
+        n_coconut_layers=4,
         **kwargs,
     ):
         super().__init__(
@@ -197,7 +195,7 @@ Continuous Latent Space
         self.cache_implementation = cache_implementation
         self.coconut_iter = coconut_iter    
         self.init_neutreno_lambda = float(init_neutreno_lambda)
-    
+        self.n_coconut_layers = int(n_coconut_layers)
         
 
 
@@ -276,7 +274,6 @@ def eager_attention_forward(
         causal_mask = mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=config.training)
     attn_output = torch.matmul(attn_weights, value_states)
@@ -522,8 +519,8 @@ class SEWYAttention(nn.Module):
         ### DIFF TRANSFORMERR ####
         # query_states = query_states.reshape(bsz, q_len, self.num_heads, 2, self.head_dim)
         # key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, 2, self.head_dim)
-        query_states, q2 = query_states[:, :, :, 0], query_states[:, :, :, 1]
-        key_states, k2 = key_states[:, :, :, 0], key_states[:, :, :, 1]
+        q1, q2 = query_states[:, :, :, 0], query_states[:, :, :, 1]
+        k1, k2 = key_states[:, :, :, 0], key_states[:, :, :, 1]
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {
@@ -541,15 +538,15 @@ class SEWYAttention(nn.Module):
             attention_type = self.config._attn_implementation
 
         attn1 , attn_weights = SEWY_ATTENTION_FUNCTION[attention_type](
-            self, query_states, key_states, value_states, attention_mask, output_attentions=output_attentions
+            self, q1, k1, value_states, attention_mask, output_attentions=output_attentions
         )
 
         attn2 , attn_weights = SEWY_ATTENTION_FUNCTION[attention_type](
             self, q2, k2, value_states, attention_mask, output_attentions=output_attentions
         )
 
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(q)
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(q)
+        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(query_states)
+        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(query_states)
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
         attn = attn1 - lambda_full * attn2
 
@@ -782,7 +779,39 @@ class SEWYModel(GemmaModel, SEWYPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         formal_layer_values = []
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        # for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        #     if output_hidden_states:
+        #         all_hidden_states += (hidden_states,)
+
+        #     if self.gradient_checkpointing and self.training:
+        #         layer_outputs  = self._gradient_checkpointing_func(
+        #             decoder_layer.__call__,
+        #             hidden_states,
+        #             causal_mask,
+        #             position_ids,
+        #             past_key_values,
+        #             output_attentions,
+        #             use_cache,
+        #             cache_position,
+        #         )
+        #     else:
+        #         layer_outputs , formal_layer_values = decoder_layer(
+        #             hidden_states,
+        #             attention_mask=causal_mask,
+        #             position_ids=position_ids,
+        #             past_key_value=past_key_values,
+        #             output_attentions=output_attentions,
+        #             use_cache=use_cache,
+        #             cache_position=cache_position,
+        #             formal_layer_values=formal_layer_values,
+        #         )
+
+        #     hidden_states = layer_outputs[0]
+
+        #     if output_attentions:
+        #         all_self_attns += (layer_outputs[1],)
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers-(self.config.n_coconut_layers)]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -813,6 +842,42 @@ class SEWYModel(GemmaModel, SEWYPreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
+
+        for _ in range(0, self.config.coconut_iter):
+            for decoder_layer in self.layers[self.config.num_hidden_layers-self.config.n_coconut_layers: self.config.num_hidden_layers]:
+                if output_hidden_states:
+                    all_hidden_states += (hidden_states,)
+
+                if self.gradient_checkpointing and self.training:
+                    layer_outputs  = self._gradient_checkpointing_func(
+                        decoder_layer.__call__,
+                        hidden_states,
+                        causal_mask,
+                        position_ids,
+                        past_key_values,
+                        output_attentions,
+                        use_cache,
+                        cache_position,
+                    )
+                else:
+                    layer_outputs , formal_layer_values = decoder_layer(
+                        hidden_states,
+                        attention_mask=causal_mask,
+                        position_ids=position_ids,
+                        past_key_value=past_key_values,
+                        output_attentions=output_attentions,
+                        use_cache=use_cache,
+                        cache_position=cache_position,
+                        formal_layer_values=formal_layer_values,
+                    )
+
+                hidden_states = layer_outputs[0]
+
+                if output_attentions:
+                    all_self_attns += (layer_outputs[1],)
+
+
+
 
         hidden_states = self.norm(hidden_states)
 
@@ -966,37 +1031,23 @@ class SEWYForCausalLM(GemmaForCausalLM):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
     
-        hidden_states = None
-        for _ in range (0, self.config.coconut_iter):
-            outputs = self.model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                inputs_embeds=hidden_states,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                cache_position=cache_position,
-            )
-            hidden_states = outputs[0]
 
 
-        # outputs = self.model(
-        #     input_ids=input_ids,
-        #     attention_mask=attention_mask,
-        #     position_ids=position_ids,
-        #     past_key_values=past_key_values,
-        #     inputs_embeds=inputs_embeds,
-        #     use_cache=use_cache,
-        #     output_attentions=output_attentions,
-        #     output_hidden_states=output_hidden_states,
-        #     return_dict=return_dict,
-        #     cache_position=cache_position,
-        # )
 
-        # hidden_states = outputs[0]
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
+
+        hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 

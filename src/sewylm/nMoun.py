@@ -94,7 +94,7 @@ class Muon(torch.optim.Optimizer):
             # AdamW update
             if self.adamw_params:
                 self._adamw_step(group)
-                
+
         self.normalize_model()
 
         return loss

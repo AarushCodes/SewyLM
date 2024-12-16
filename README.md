@@ -4,7 +4,7 @@ SewyLM is a transformer model made by incorporating the following:
 - Gemma2
 - nGPT
 - Differential Transformer
-- COCONUT
+- LOCONUT (Limited COCONUT) (a varitation of COCONUT)
 - NeuTRENO
 - Muon optimizer
 ## FYI im a 15 yr old 

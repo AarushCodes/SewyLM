@@ -14,9 +14,9 @@ repository = "https://github.com/AarushCodes/SewyLM/"
 keywords = ["language model", "sewy", "nlp"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
-torch = "^1.9.0"
-transformers = "^4.0.0"
+python = "*"
+torch = ">=2.0.0"
+transformers = ">=4.45.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.0"

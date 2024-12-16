@@ -103,7 +103,7 @@ class SEWYConfig(PretrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
@@ -152,7 +152,7 @@ Continuous Latent Space
         pad_token_id=0,
         eos_token_id=1,
         bos_token_id=2,
-        tie_word_embeddings=False,
+        tie_word_embeddings=True,
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,

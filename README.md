@@ -6,7 +6,7 @@ SewyLM is a transformer model made by incorporating the following:
 - Differential Transformer
 - COCONUT
 - NeuTRENO
-
+- Muon optimizer
 ## FYI im a 15 yr old 
 
 ## Installation
@@ -28,6 +28,11 @@ model = SEWYForCausalLM(config)
 print(model)
 ```
 
+## I have also made a modified version of [Moun Optimizer](https://github.com/KellerJordan/Muon/tree/master) in accordance with nGPT paper and few optimizations.
+```python
+from SewyLM import nMoun
+## use as pytorch optimizer and also pass model to it like model=model
+```
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a pull request or open an issue.
@@ -40,3 +45,5 @@ This project is licensed under the GNU GPL 3 License - see the [LICENSE](LICENSE
 
 Aarush Khilosia  
 Email: aarushlikesllms@gmail.com
+
+## Credit to the respective authors 

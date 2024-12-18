@@ -39,8 +39,8 @@ class Muon(torch.optim.Optimizer):
     def __init__(self, muon_params, lr=0.02, momentum=0.95, nesterov=True, ns_steps=5,
                  adamw_params=None, adamw_lr=3e-4, adamw_betas=(0.8, 0.95), adamw_eps=1e-8, adamw_wd=0, model=None,
                  momentum_warmup_steps=300, initial_momentum=0.85):  # Added new parameters
-        #is_cuda = torch.cuda.is_available()
-        #is_xpu = torch.xpu.is_available()
+        # is_cuda = torch.cuda.is_available()
+        # is_xpu = torch.xpu.is_available()
         defaults = dict(lr=lr, momentum=momentum, nesterov=nesterov, ns_steps=ns_steps,
                        adamw_lr_ratio=adamw_lr/lr, adamw_betas=adamw_betas,
                        adamw_eps=adamw_eps, adamw_wd=adamw_wd,
@@ -79,15 +79,15 @@ class Muon(torch.optim.Optimizer):
 
         # Pre-allocate flat buffer for distributed updates
         self.total_muon_params = sum(p.numel() for p in self.muon_params)
-        #if is_cuda:
+        # if is_cuda:
         self.updates_flat = torch.zeros(self.total_muon_params, device='cuda', dtype=torch.bfloat16)
-       # if is_xpu:
-        #    self.updates_flat = torch.zeros(self.total_muon_params, device='xpu', dtype=torch.bfloat16)
-        #else:
-        #    # raise ValueError("Muon optimizer requires a GPU or XPU to be available.")
-        #    print('no cuda or xpu available! using cpu')
-        #    self.updates_flat = torch.zeros(self.total_muon_params, device='cpu', dtype=torch.bfloat16)
-        # self.updates_flat = torch.zeros(self.total_muon_params, device='cuda', dtype=torch.bfloat16)
+        # if is_xpu:
+        #     self.updates_flat = torch.zeros(self.total_muon_params, device='xpu', dtype=torch.bfloat16)
+        # else:
+        #     # raise ValueError("Muon optimizer requires a GPU or XPU to be available.")
+        #     print('no cuda or xpu available! using cpu')
+        #     self.updates_flat = torch.zeros(self.total_muon_params, device='cpu', dtype=torch.bfloat16)
+        # # self.updates_flat = torch.zeros(self.total_muon_params, device='cuda', dtype=torch.bfloat16)
 
         # Add warmup tracking
         self.current_step = 0

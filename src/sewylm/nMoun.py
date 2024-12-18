@@ -80,7 +80,7 @@ class Muon(torch.optim.Optimizer):
         # Pre-allocate flat buffer for distributed updates
         self.total_muon_params = sum(p.numel() for p in self.muon_params)
         #if is_cuda:
-         self.updates_flat = torch.zeros(self.total_muon_params, device='cuda', dtype=torch.bfloat16)
+        self.updates_flat = torch.zeros(self.total_muon_params, device='cuda', dtype=torch.bfloat16)
        # if is_xpu:
         #    self.updates_flat = torch.zeros(self.total_muon_params, device='xpu', dtype=torch.bfloat16)
         #else:

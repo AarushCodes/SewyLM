@@ -280,6 +280,33 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
+def diff_attention_forward(
+    config: SEWYConfig,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **_kwargs,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    key_states = repeat_kv(key, config.num_key_value_groups)
+    value_states = repeat_kv(value, config.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * config.scaling
+
+    if config.attn_logit_softcapping is not None:
+        attn_weights = attn_weights / config.attn_logit_softcapping
+        attn_weights = torch.tanh(attn_weights)
+        attn_weights = attn_weights * config.attn_logit_softcapping
+    if mask is not None:  # no matter the length, we just slice it
+        causal_mask = mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=config.training)
+    # attn_output = torch.matmul(attn_weights, value_states)
+    # attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_weights
+
 
 def flash_attention_forward(
     config: SEWYConfig,
@@ -404,6 +431,7 @@ SEWY_ATTENTION_FUNCTION = {
     "flex_attention": flex_attention_forward,
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
+    "diff": diff_attention_forward,
 }
 
 
@@ -502,8 +530,8 @@ class SEWYAttention(nn.Module):
         # key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         # value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         ### DIFF TRANSFORMERR ####
-        query_states = query_states.reshape(bsz, q_len, self.num_heads, 2, self.head_dim)
-        key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, 2, self.head_dim)
+        # query_states = query_states.reshape(bsz, q_len, self.num_heads, 2, self.head_dim)
+        # key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, 2, self.head_dim)
 
 
 
@@ -518,42 +546,57 @@ class SEWYAttention(nn.Module):
 
         ### DIFF TRANSFORMERR ####
         # query_states = query_states.reshape(bsz, q_len, self.num_heads, 2, self.head_dim)
-        # key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, 2, self.head_dim)
-        q1, q2 = query_states[:, :, :, 0], query_states[:, :, :, 1]
-        k1, k2 = key_states[:, :, :, 0], key_states[:, :, :, 1]
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "sliding_window": self.sliding_window,
-                "cache_position": cache_position,
-            }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        # # key_states = key_states.reshape(bsz, q_len, self.num_key_value_heads, 2, self.head_dim)
+        # q1, q2 = query_states[:, :, :, 0], query_states[:, :, :, 1]
+        # k1, k2 = key_states[:, :, :, 0], key_states[:, :, :, 1]
+        # if past_key_value is not None:
+        #     # sin and cos are specific to RoPE models; cache_position needed for the static cache
+        #     cache_kwargs = {
+        #         "sin": sin,
+        #         "cos": cos,
+        #         "sliding_window": self.sliding_window,
+        #         "cache_position": cache_position,
+        #     }
+        #     key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
-            logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
-            attention_type = "flex_attention"
-        else:
-            attention_type = self.config._attn_implementation
+        # if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
+        #     logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
+        #     attention_type = "flex_attention"
+        # else:
+        #     attention_type = self.config._attn_implementation
 
-        attn1 , attn_weights = SEWY_ATTENTION_FUNCTION[attention_type](
-            self, q1, k1, value_states, attention_mask, output_attentions=output_attentions
-        )
+        # attn1 , attn_weights = SEWY_ATTENTION_FUNCTION[attention_type](
+        #     self, q1, k1, value_states, attention_mask, output_attentions=output_attentions
+        # )
 
-        attn2 , attn_weights = SEWY_ATTENTION_FUNCTION[attention_type](
-            self, q2, k2, value_states, attention_mask, output_attentions=output_attentions
-        )
+        # attn2 , attn_weights = SEWY_ATTENTION_FUNCTION[attention_type](
+        #     self, q2, k2, value_states, attention_mask, output_attentions=output_attentions
+        # )
 
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(query_states)
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(query_states)
-        lambda_full = lambda_1 - lambda_2 + self.lambda_init
-        attn = attn1 - lambda_full * attn2
+        # lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(query_states)
+        # lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(query_states)
+        # lambda_full = lambda_1 - lambda_2 + self.lambda_init
+        # attn = attn1 - lambda_full * attn2
 
-        attn = self.subln(attn)
-        attn = attn * (1 - self.lambda_init)
-        attn = attn.reshape(bsz, q_len, self.num_heads * 2 * self.head_dim)
+        # attn = self.subln(attn)
+        # attn = attn * (1 - self.lambda_init)
+        # attn = attn.reshape(bsz, q_len, self.num_heads * 2 * self.head_dim)
         
+
+        attn_weights = SEWY_ATTENTION_FUNCTION["diff"](
+            self, query_states, key_states, value_states, attention_mask, output_attentions=output_attentions
+        )
+
+        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(q)
+        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(q)
+        lambda_full = lambda_1 - lambda_2 + self.lambda_init
+        attn_weights = attn_weights.view(bsz, self.num_heads, 2, q_len, q_len)
+        attn_weights = attn_weights[:, :, 0] - lambda_full * attn_weights[:, :, 1]
+        
+        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output = self.subln(attn_output)
+        attn_output = attn_output * (1 - self.lambda_init)
+        attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, self.num_heads * 2 * self.head_dim).contiguous()
 
 
         ### neutreno
